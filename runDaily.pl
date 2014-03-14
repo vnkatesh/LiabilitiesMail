@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use Data::Dump qw(dump);
 use POSIX qw(strftime);
+use Getopt::Long;
 
 open( FILE, "</Users/venkatesh/Dropbox/Finances/Toronto/mapping.conf" )
     or die( "Can't open file mapping.conf $!" );
@@ -12,16 +13,22 @@ close FILE;
 my @t = localtime;
 my $isMonthly = scalar($t[3] eq "01" || $t[3] eq "1");
 my $isWeekly = scalar($t[6] eq "1");
+my $dryrun = 0;
+my $forcerun = 0;
+GetOptions("dry" => \$dryrun,
+    "force" => \$forcerun);
 foreach my $line (@lines) {
     if($line =~ /^#/) {
         next;
     }
     chomp($line);
+    if(!($forcerun)) {
     if($line =~ /weekly/gi && !$isWeekly) {
         next;
     }
     if($line =~ /monthly/gi && !$isMonthly) {
         next;
+    }
     }
     $line =~ s/\s*$//g;
     #Aakash[0] aakash-DqAhuueba[1] akaash.nitd@gmail.com[2]
@@ -33,7 +40,15 @@ foreach my $line (@lines) {
     my $filename = "/Users/venkatesh/Dropbox/Public/liabilities-finance/".$filenameLastPart;
     my $urlname = "https://dl.dropboxusercontent.com/u/4854847/liabilities-finance/".$filenameLastPart;
     my $commandname = (split(/-/,$splitWords[1]))[0];
-    my $command = "/opt/local/bin/ledger -f /Users/venkatesh/Dropbox/Finances/Toronto/finance.ldg reg ^liabilities:$commandname -w 180 > $filename";
+    my $command = "/opt/local/bin/ledger -f /Users/venkatesh/Dropbox/Finances/Toronto/finance.ldg reg ^liabilities:$commandname -w 180";
+    if(!($dryrun)) {
+        $command .=  " > $filename";
+    } else {
+        print "\n\n".uc($name)."\n";
+        print "===================================================================\n";
+        system($command);
+        next;
+    }
     system($command);
     if(!($? eq "0")) {
         print "Failed runCommand, sending mail\n";
@@ -43,7 +58,10 @@ foreach my $line (@lines) {
     my $value = readpipe("tail -n 1 $filename");
     chomp($value);
     $value = (split(/\$/, $value))[2];
+    if(!($dryrun) && ($value<0 || $value>5)) {
     &SendMail(ucfirst($name), $splitWords[2], $urlname, $value);
+    }
+    sleep 5;
 }
 
 sub SendMail{
@@ -66,7 +84,7 @@ sub SendMail{
     $subject .= " $prettyDate";
     $body .= $urlname."\r\n\r\n";
     $body .= "Cheers,\r\nVenkatesh Nandakumar\r\n";
-    $body .= "\r\n\r\nP.S If you're receiving this for the first time, you'll be glad to know that you can change the frequency of these mails by replying STOP, WEEKLY, MONTHLY, YEARLY on-top of the reply-mail.\r\n";
+    $body .= "\r\n\r\nP.S If you're receiving this for the first time, you'll be glad to know that you can change the frequency of these mails by replying STOP, DAILY, WEEKLY, MONTHLY, QUARTERLY, YEARLY on-top of the reply-mail.\r\n";
     system("echo \"$body\" | mail -s \"$subject\" \"$to\"");
 }
 
